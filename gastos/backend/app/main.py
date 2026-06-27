@@ -1,7 +1,10 @@
+import os
+import json
+import urllib.request
 from datetime import date, datetime
 from collections import defaultdict
 from typing import Optional
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlmodel import Session, select
@@ -9,7 +12,47 @@ from sqlmodel import Session, select
 from .db import init_db, get_session
 from .models import Factura, CATEGORIAS, ESTADOS
 
-app = FastAPI(title="Gastos del hogar — stack-anto", version="1.0.0")
+app = FastAPI(title="Gastos del hogar — stack-anto", version="1.1.0")
+
+# ---------- Notificaciones a los móviles (vía HA) ----------
+# Funciona solo dentro del add-on de HA (usa el SUPERVISOR_TOKEN para llamar a notify).
+SUPERVISOR_TOKEN = os.environ.get("SUPERVISOR_TOKEN")
+HA_CORE_API = "http://supervisor/core/api"
+NOTIFY_TARGETS = [
+    "mobile_app_iphone_de_antonio",
+    "mobile_app_iphone_de_mariana",
+]
+CAT_EMOJI = {
+    "luz": "⚡", "agua": "💧", "gas": "🔥", "internet": "🌐",
+    "movil": "📱", "comunidad": "🏢", "seguro": "🛡️", "otro": "📄",
+}
+
+
+def _factura_linea(f: Factura) -> str:
+    em = CAT_EMOJI.get(f.tipo, "📄")
+    estado = "pendiente" if f.estado == "pendiente" else "pagada"
+    return f"{em} {f.tipo.capitalize()} · {f.empresa} · {f.monto:.2f}€ · vence {f.fecha_cobro} ({estado})"
+
+
+def notificar(title: str, message: str) -> None:
+    """Envía un push a los móviles configurados. Nunca rompe la API si falla."""
+    if not SUPERVISOR_TOKEN:
+        return
+    payload = json.dumps({"title": title, "message": message}).encode()
+    for tgt in NOTIFY_TARGETS:
+        try:
+            req = urllib.request.Request(
+                f"{HA_CORE_API}/services/notify/{tgt}",
+                data=payload,
+                headers={
+                    "Authorization": f"Bearer {SUPERVISOR_TOKEN}",
+                    "Content-Type": "application/json",
+                },
+                method="POST",
+            )
+            urllib.request.urlopen(req, timeout=5)
+        except Exception:
+            pass
 
 app.add_middleware(
     CORSMiddleware,
@@ -72,7 +115,7 @@ def listar(
 
 
 @app.post("/facturas")
-def crear(data: FacturaIn, session: Session = Depends(get_session)):
+def crear(data: FacturaIn, background: BackgroundTasks, session: Session = Depends(get_session)):
     if data.tipo not in CATEGORIAS:
         raise HTTPException(400, f"tipo inválido: {data.tipo}")
     if data.estado not in ESTADOS:
@@ -83,14 +126,16 @@ def crear(data: FacturaIn, session: Session = Depends(get_session)):
     session.add(f)
     session.commit()
     session.refresh(f)
+    background.add_task(notificar, "🧾 Nueva factura", _factura_linea(f))
     return f
 
 
 @app.patch("/facturas/{fid}")
-def actualizar(fid: int, data: FacturaPatch, session: Session = Depends(get_session)):
+def actualizar(fid: int, data: FacturaPatch, background: BackgroundTasks, session: Session = Depends(get_session)):
     f = session.get(Factura, fid)
     if not f:
         raise HTTPException(404, "factura no encontrada")
+    estado_antes = f.estado
     payload = data.model_dump(exclude_unset=True)
     for k, v in payload.items():
         setattr(f, k, v)
@@ -102,16 +147,23 @@ def actualizar(fid: int, data: FacturaPatch, session: Session = Depends(get_sess
     session.add(f)
     session.commit()
     session.refresh(f)
+    # Aviso: distinto según si el cambio fue "marcar pagada" o una edición normal
+    if estado_antes != "pagado" and f.estado == "pagado":
+        background.add_task(notificar, "✅ Factura pagada", _factura_linea(f))
+    else:
+        background.add_task(notificar, "✏️ Factura modificada", _factura_linea(f))
     return f
 
 
 @app.delete("/facturas/{fid}")
-def borrar(fid: int, session: Session = Depends(get_session)):
+def borrar(fid: int, background: BackgroundTasks, session: Session = Depends(get_session)):
     f = session.get(Factura, fid)
     if not f:
         raise HTTPException(404, "factura no encontrada")
+    linea = _factura_linea(f)
     session.delete(f)
     session.commit()
+    background.add_task(notificar, "🗑️ Factura borrada", linea)
     return {"ok": True}
 
 
