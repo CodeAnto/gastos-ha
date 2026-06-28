@@ -1,5 +1,5 @@
 name: Gastos del hogar
-version: "1.1.0"
+version: "1.2.0"
 slug: gastos
 description: Tracker de facturas del hogar (luz, agua, gas, internet...) con resumen y donuts
 url: https://github.com/CodeAnto/gastos-ha

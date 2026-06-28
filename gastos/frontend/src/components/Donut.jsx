@@ -38,7 +38,7 @@ export default function Donut({ data = [], size = 180, thickness = 22, centerLab
           position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', textAlign: 'center',
         }}>
           <Box>
-            <Typography sx={{ fontFamily: '"Space Grotesk"', fontWeight: 700, fontSize: 22, lineHeight: 1 }}>
+            <Typography sx={{ fontFamily: '"Inter"', fontWeight: 700, fontSize: 22, lineHeight: 1 }}>
               {centerValue}
             </Typography>
             {centerLabel && (

@@ -16,7 +16,7 @@ function Kpi({ label, value, sub, color = '#34d399', delay = 0 }) {
     >
       <Box sx={{ position: 'absolute', top: 0, left: 0, width: '100%', height: 3, background: color, opacity: 0.9 }} />
       <Typography variant="overline" sx={{ opacity: 0.6 }}>{label}</Typography>
-      <Typography sx={{ fontFamily: '"Space Grotesk"', fontWeight: 700, fontSize: 30, lineHeight: 1.1, color }}>
+      <Typography sx={{ fontFamily: '"JetBrains Mono", monospace', fontVariantNumeric: 'tabular-nums', fontWeight: 700, fontSize: 28, lineHeight: 1.1, color }}>
         {value}
       </Typography>
       {sub && <Typography variant="body2" sx={{ opacity: 0.6, mt: 0.5 }}>{sub}</Typography>}
@@ -76,7 +76,7 @@ export default function Resumen() {
                 {r.proximo.fecha_cobro} · {r.proximo.dias === 0 ? 'hoy' : `en ${r.proximo.dias} día${r.proximo.dias === 1 ? '' : 's'}`}
               </Typography>
             </Box>
-            <Typography sx={{ fontFamily: '"Space Grotesk"', fontWeight: 700, fontSize: 24, color: '#fbbf24' }}>
+            <Typography sx={{ fontFamily: '"JetBrains Mono", monospace', fontVariantNumeric: 'tabular-nums', fontWeight: 700, fontSize: 22, color: '#f59e0b' }}>
               {eur(r.proximo.monto)}
             </Typography>
           </Stack>
